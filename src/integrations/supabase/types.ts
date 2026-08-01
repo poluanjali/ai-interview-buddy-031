@@ -14,7 +14,256 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      interview_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          interview_id: string
+          role: string
+          scores: Json | null
+          stage: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          interview_id: string
+          role: string
+          scores?: Json | null
+          stage: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          interview_id?: string
+          role?: string
+          scores?: Json | null
+          stage?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interview_messages_interview_id_fkey"
+            columns: ["interview_id"]
+            isOneToOne: false
+            referencedRelation: "interviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      interview_reports: {
+        Row: {
+          category_scores: Json | null
+          created_at: string
+          id: string
+          interview_id: string
+          overall_score: number | null
+          recommended_resources: string[] | null
+          sample_answers: Json | null
+          strengths: string[] | null
+          summary: string | null
+          updated_at: string
+          weaknesses: string[] | null
+        }
+        Insert: {
+          category_scores?: Json | null
+          created_at?: string
+          id?: string
+          interview_id: string
+          overall_score?: number | null
+          recommended_resources?: string[] | null
+          sample_answers?: Json | null
+          strengths?: string[] | null
+          summary?: string | null
+          updated_at?: string
+          weaknesses?: string[] | null
+        }
+        Update: {
+          category_scores?: Json | null
+          created_at?: string
+          id?: string
+          interview_id?: string
+          overall_score?: number | null
+          recommended_resources?: string[] | null
+          sample_answers?: Json | null
+          strengths?: string[] | null
+          summary?: string | null
+          updated_at?: string
+          weaknesses?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interview_reports_interview_id_fkey"
+            columns: ["interview_id"]
+            isOneToOne: false
+            referencedRelation: "interviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      interviews: {
+        Row: {
+          company: string | null
+          created_at: string
+          current_stage: string
+          difficulty: string
+          ended_at: string | null
+          id: string
+          mode: string
+          overall_score: number | null
+          role: string | null
+          settings: Json | null
+          started_at: string
+          status: string
+          title: string
+          topics: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string
+          current_stage?: string
+          difficulty?: string
+          ended_at?: string | null
+          id?: string
+          mode?: string
+          overall_score?: number | null
+          role?: string | null
+          settings?: Json | null
+          started_at?: string
+          status?: string
+          title: string
+          topics?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company?: string | null
+          created_at?: string
+          current_stage?: string
+          difficulty?: string
+          ended_at?: string | null
+          id?: string
+          mode?: string
+          overall_score?: number | null
+          role?: string | null
+          settings?: Json | null
+          started_at?: string
+          status?: string
+          title?: string
+          topics?: string[] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          branch: string | null
+          created_at: string
+          full_name: string | null
+          graduation_year: number | null
+          id: string
+          target_role: string | null
+          updated_at: string
+          user_id: string
+          weak_areas: string[] | null
+        }
+        Insert: {
+          branch?: string | null
+          created_at?: string
+          full_name?: string | null
+          graduation_year?: number | null
+          id?: string
+          target_role?: string | null
+          updated_at?: string
+          user_id: string
+          weak_areas?: string[] | null
+        }
+        Update: {
+          branch?: string | null
+          created_at?: string
+          full_name?: string | null
+          graduation_year?: number | null
+          id?: string
+          target_role?: string | null
+          updated_at?: string
+          user_id?: string
+          weak_areas?: string[] | null
+        }
+        Relationships: []
+      }
+      question_bank: {
+        Row: {
+          company_tag: string | null
+          created_at: string
+          difficulty: string
+          expected_keywords: string[] | null
+          id: string
+          model_answer: string | null
+          question: string
+          tags: string[] | null
+          topic: string
+        }
+        Insert: {
+          company_tag?: string | null
+          created_at?: string
+          difficulty?: string
+          expected_keywords?: string[] | null
+          id?: string
+          model_answer?: string | null
+          question: string
+          tags?: string[] | null
+          topic: string
+        }
+        Update: {
+          company_tag?: string | null
+          created_at?: string
+          difficulty?: string
+          expected_keywords?: string[] | null
+          id?: string
+          model_answer?: string | null
+          question?: string
+          tags?: string[] | null
+          topic?: string
+        }
+        Relationships: []
+      }
+      user_progress: {
+        Row: {
+          average_score: number | null
+          created_at: string
+          id: string
+          last_attempt_at: string | null
+          topic: string
+          total_attempts: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          average_score?: number | null
+          created_at?: string
+          id?: string
+          last_attempt_at?: string | null
+          topic: string
+          total_attempts?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          average_score?: number | null
+          created_at?: string
+          id?: string
+          last_attempt_at?: string | null
+          topic?: string
+          total_attempts?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
