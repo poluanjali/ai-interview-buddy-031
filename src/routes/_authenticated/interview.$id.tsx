@@ -33,7 +33,7 @@ function InterviewPage() {
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["interview", id],
-    queryFn: () => fetchInterview(id),
+    queryFn: () => fetchInterview({ data: id }),
   });
 
   const [answer, setAnswer] = useState("");
