@@ -49,7 +49,7 @@ Rules:
 
 export const createInterview = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => CreateInterviewInputSchema.parse(input))
+  .validator((input: unknown) => CreateInterviewInputSchema.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { data: profile } = await supabase
@@ -107,7 +107,7 @@ export const createInterview = createServerFn({ method: "POST" })
 
 export const submitAnswer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => SubmitAnswerInputSchema.parse(input))
+  .validator((input: unknown) => SubmitAnswerInputSchema.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 
@@ -191,7 +191,7 @@ export const submitAnswer = createServerFn({ method: "POST" })
 
 export const endInterview = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => EndInterviewInputSchema.parse(input))
+  .validator((input: unknown) => EndInterviewInputSchema.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
 
@@ -288,7 +288,7 @@ export const endInterview = createServerFn({ method: "POST" })
 
 export const getInterview = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => z.string().uuid().parse(input))
+  .validator((input: unknown) => z.string().uuid().parse(input))
   .handler(async ({ data: interviewId, context }) => {
     const { supabase, userId } = context;
 
