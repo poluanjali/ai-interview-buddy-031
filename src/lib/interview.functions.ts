@@ -7,13 +7,15 @@ import {
   CreateInterviewInputSchema,
   SubmitAnswerInputSchema,
   EndInterviewInputSchema,
+  InterviewMessageSchema,
   type InterviewStage,
-  type NextQuestionOutput,
-  type FinalReportOutput,
 } from "@/lib/interview.schemas";
+import type { Database } from "@/integrations/supabase/types";
 
 const INTERVIEW_MODEL = "google/gemini-3.6-flash";
 const REPORT_MODEL = "openai/gpt-5.5";
+
+type Json = Database["public"]["Tables"]["interviews"]["Row"]["settings"];
 
 function getProvider() {
   const key = process.env["LOVABLE_API_KEY"];
@@ -22,11 +24,11 @@ function getProvider() {
 }
 
 function baseSystemPrompt(settings: {
-  role?: string;
-  company?: string;
+  role?: string | undefined;
+  company?: string | undefined;
   difficulty: string;
   topics: string[];
-  resumeText?: string;
+  resumeText?: string | undefined;
   voice: "male" | "female";
 }) {
   const name = settings.voice === "female" ? "Aria" : "Alex";
@@ -83,7 +85,7 @@ export const createInterview = createServerFn({ method: "POST" })
         role: settings.role,
         company: settings.company,
         topics: settings.topics,
-        settings: settings as unknown as Record<string, unknown>,
+        settings: settings as Json,
         current_stage: firstStage,
         status: "in_progress",
       })
@@ -119,8 +121,10 @@ export const submitAnswer = createServerFn({ method: "POST" })
     if (interviewError || !interview) throw new Error("Interview not found");
     if (interview.status === "complete") throw new Error("Interview is already complete");
 
-    const messages = interview.interview_messages as Array<{ role: "ai" | "user"; content: string; stage: InterviewStage }>;
-    messages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const messages = InterviewMessageSchema.array().parse(
+      interview.interview_messages
+    );
+    messages.sort((a, b) => new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime());
 
     await supabase.from("interview_messages").insert({
       interview_id: interview.id,
@@ -134,7 +138,7 @@ export const submitAnswer = createServerFn({ method: "POST" })
       company?: string;
       role?: string;
       resumeText?: string;
-      voice: "male" | "female";
+      voice?: "male" | "female";
     };
 
     const history = messages
@@ -174,7 +178,7 @@ export const submitAnswer = createServerFn({ method: "POST" })
       role: "ai",
       content: output.question,
       stage: output.stage,
-      scores: output.scores as unknown as Record<string, unknown>,
+      scores: output.scores as Json,
     });
 
     await supabase
@@ -182,11 +186,7 @@ export const submitAnswer = createServerFn({ method: "POST" })
       .update({ current_stage: output.stage })
       .eq("id", interview.id);
 
-    if (output.isFinal) {
-      return { ...output, interviewId: interview.id, isFinal: true };
-    }
-
-    return { ...output, interviewId: interview.id, isFinal: false };
+    return { ...output, interviewId: interview.id, isFinal: output.isFinal };
   });
 
 export const endInterview = createServerFn({ method: "POST" })
@@ -204,8 +204,8 @@ export const endInterview = createServerFn({ method: "POST" })
 
     if (interviewError || !interview) throw new Error("Interview not found");
 
-    const messages = interview.interview_messages as Array<{ role: "ai" | "user"; content: string; stage: InterviewStage; scores?: Record<string, number> }>;
-    messages.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    const messages = InterviewMessageSchema.array().parse(interview.interview_messages);
+    messages.sort((a, b) => new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime());
 
     const transcript = messages.map((m) => `${m.role === "ai" ? "Interviewer" : "Candidate"}: ${m.content}`).join("\n");
 
@@ -233,12 +233,12 @@ export const endInterview = createServerFn({ method: "POST" })
       .insert({
         interview_id: interview.id,
         overall_score: overallScore,
-        category_scores: output.categoryScores as unknown as Record<string, unknown>,
+        category_scores: output.categoryScores as Json,
         strengths: output.strengths,
         weaknesses: output.weaknesses,
         summary: output.summary,
         recommended_resources: output.recommendedResources,
-        sample_answers: output.sampleAnswers as unknown as Record<string, unknown>,
+        sample_answers: output.sampleAnswers as Json,
       })
       .select()
       .single();
@@ -255,15 +255,32 @@ export const endInterview = createServerFn({ method: "POST" })
       const avgScore =
         topicMessages.length > 0
           ? Math.round(
-              topicMessages.reduce((sum, m) => sum + (m.scores?.overall ?? 0), 0) / topicMessages.length
+              topicMessages.reduce((sum, m) => sum + (m.scores?.["overall"] ?? 0), 0) / topicMessages.length
             ) * 10
           : overallScore;
 
-      await supabase.rpc("upsert_user_progress", {
-        p_user_id: userId,
-        p_topic: topic,
-        p_score: avgScore,
-      });
+      const { data: existing } = await supabase
+        .from("user_progress")
+        .select("total_attempts, average_score")
+        .eq("user_id", userId)
+        .eq("topic", topic)
+        .single();
+
+      const totalAttempts = (existing?.total_attempts ?? 0) + 1;
+      const newAverage = existing?.average_score
+        ? Math.round((existing.average_score * (totalAttempts - 1) + avgScore) / totalAttempts)
+        : avgScore;
+
+      await supabase.from("user_progress").upsert(
+        {
+          user_id: userId,
+          topic,
+          total_attempts: totalAttempts,
+          average_score: newAverage,
+          last_attempt_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id, topic" }
+      );
     }
 
     return { reportId: report.id, ...output };
