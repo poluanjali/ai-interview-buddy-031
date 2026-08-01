@@ -76,17 +76,16 @@ function InterviewPage() {
   };
 
   const toggleVoice = () => {
-    if (!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
+    if (!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)) {
       toast.error("Voice input is not supported in this browser.");
       return;
     }
     if (isListening) {
-      // @ts-ignore
-      window.recognition?.stop();
+      (window as any).recognition?.stop();
       setIsListening(false);
       return;
     }
-    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     const recognition = new Recognition();
     recognition.continuous = false;
     recognition.interimResults = false;
@@ -97,8 +96,7 @@ function InterviewPage() {
     };
     recognition.onerror = () => toast.error("Voice recognition failed. Try again.");
     recognition.onend = () => setIsListening(false);
-    // @ts-ignore
-    window.recognition = recognition;
+    (window as any).recognition = recognition;
     recognition.start();
     setIsListening(true);
   };
