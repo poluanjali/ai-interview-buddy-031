@@ -57,14 +57,16 @@ function DashboardPage() {
     setCreating(true);
     try {
       const result = await startInterview({
-        mode,
-        title,
-        difficulty,
-        settings: {
-          topics,
-          company: company || undefined,
-          role: role || undefined,
-          resumeText: resumeText || undefined,
+        data: {
+          mode,
+          title,
+          difficulty,
+          settings: {
+            topics,
+            company: company || undefined,
+            role: role || undefined,
+            resumeText: resumeText || undefined,
+          },
         },
       });
       toast.success("Interview started!");
