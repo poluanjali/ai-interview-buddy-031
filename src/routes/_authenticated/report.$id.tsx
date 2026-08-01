@@ -25,7 +25,7 @@ function ReportPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["interview", id],
-    queryFn: () => fetchInterview(id),
+    queryFn: () => fetchInterview({ data: id }),
   });
 
   if (isLoading) {
