@@ -52,7 +52,7 @@ function InterviewPage() {
     if (!answer.trim() || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await submit({ interviewId: id, answer: answer.trim() });
+      await submit({ data: { interviewId: id, answer: answer.trim() } });
       setAnswer("");
       await refetch();
     } catch (err) {
