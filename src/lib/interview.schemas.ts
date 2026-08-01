@@ -40,6 +40,7 @@ export const EndInterviewInputSchema = z.object({
 });
 
 export const InterviewMessageSchema = z.object({
+  id: z.string().uuid().optional(),
   role: z.enum(["ai", "user"]),
   content: z.string(),
   stage: InterviewStageSchema,
@@ -51,6 +52,7 @@ export const InterviewMessageSchema = z.object({
       overall: z.number().int().min(1).max(10).optional(),
     })
     .optional(),
+  created_at: z.string().datetime().optional(),
 });
 
 export const NextQuestionOutputSchema = z.object({
