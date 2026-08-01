@@ -26,6 +26,17 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        navigate({ to: "/dashboard" });
+      } else {
+        setChecking(false);
+      }
+    });
+  }, [navigate]);
 
   const handleEmailAuth = async (type: "login" | "signup") => {
     setLoading(true);
