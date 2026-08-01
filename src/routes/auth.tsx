@@ -44,12 +44,16 @@ function AuthPage() {
       if (type === "login") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
+        navigate({ to: "/dashboard" });
       } else {
-        const { error } = await supabase.auth.signUp({ email, password });
+        const { error, data } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        toast.success("Check your email to confirm your account.");
+        if (data.session) {
+          navigate({ to: "/dashboard" });
+        } else {
+          toast.success("Check your email to confirm your account.");
+        }
       }
-      navigate({ to: "/dashboard" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Authentication failed");
     } finally {
