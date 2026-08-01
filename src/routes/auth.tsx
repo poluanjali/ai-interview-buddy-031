@@ -73,6 +73,14 @@ function AuthPage() {
     }
   };
 
+  if (checking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/30">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 px-6 py-12">
       <Card className="w-full max-w-md">
