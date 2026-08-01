@@ -66,7 +66,7 @@ function InterviewPage() {
     if (isEnding) return;
     setIsEnding(true);
     try {
-      const result = await end({ interviewId: id });
+      const result = await end({ data: { interviewId: id } });
       toast.success("Interview complete! Generating report...");
       navigate({ to: "/report/$id", params: { id: result.reportId } });
     } catch (err) {
