@@ -51,8 +51,9 @@ export const InterviewMessageSchema = z.object({
       confidenceStructure: z.number().int().min(1).max(10).optional(),
       overall: z.number().int().min(1).max(10).optional(),
     })
-    .optional(),
-  created_at: z.string().datetime().optional(),
+    .nullish()
+    .transform((v) => v ?? undefined),
+  created_at: z.string().nullish().transform((v) => v ?? undefined),
 });
 
 export const NextQuestionOutputSchema = z.object({

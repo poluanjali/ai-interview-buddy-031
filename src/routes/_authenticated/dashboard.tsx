@@ -39,7 +39,7 @@ function DashboardPage() {
   });
 
   const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState("Placement practice session");
   const [mode, setMode] = useState<"quick" | "full" | "company" | "custom">("quick");
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">("medium");
   const [company, setCompany] = useState("");
@@ -53,13 +53,17 @@ function DashboardPage() {
   };
 
   const handleCreate = async () => {
-    if (!title || topics.length === 0) return;
+    if (topics.length === 0) {
+      toast.error("Pick at least one topic.");
+      return;
+    }
+    const sessionTitle = title.trim() || `${topics[0]} practice session`;
     setCreating(true);
     try {
       const result = await startInterview({
         data: {
           mode,
-          title,
+          title: sessionTitle,
           difficulty,
           settings: {
             topics,
@@ -176,7 +180,7 @@ function DashboardPage() {
                 <Label htmlFor="resume">Resume / project summary (optional)</Label>
                 <Textarea id="resume" placeholder="Paste key projects, skills, and achievements..." value={resumeText} onChange={(e) => setResumeText(e.target.value)} rows={4} />
               </div>
-              <Button className="w-full" onClick={handleCreate} disabled={creating || !title || topics.length === 0}>
+              <Button className="w-full" onClick={handleCreate} disabled={creating || topics.length === 0}>
                 {creating ? "Starting..." : "Start interview"}
               </Button>
             </div>
