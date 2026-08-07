@@ -1,8 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { generateText, Output } from "ai";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
+import { generateJson, objectSchema } from "@/lib/ai-gateway.server";
 import {
   CreateInterviewInputSchema,
   SubmitAnswerInputSchema,
@@ -17,10 +16,10 @@ const REPORT_MODEL = "openai/gpt-5.5";
 
 type Json = Database["public"]["Tables"]["interviews"]["Row"]["settings"];
 
-function getProvider() {
+function getApiKey() {
   const key = process.env["LOVABLE_API_KEY"];
   if (!key) throw new Error("Missing LOVABLE_API_KEY");
-  return createLovableAiGatewayProvider(key);
+  return key;
 }
 
 function baseSystemPrompt(settings: {
@@ -62,18 +61,26 @@ export const createInterview = createServerFn({ method: "POST" })
     const settings = data.settings;
     const firstStage: InterviewStage = "introduction";
 
-    const { output } = await generateText({
-      model: getProvider()(INTERVIEW_MODEL),
-      system: baseSystemPrompt({ ...settings, difficulty: data.difficulty }),
-      output: Output.object({
-        schema: z.object({
-          stage: z.enum(["introduction", "hr", "technical", "resume", "behavioral", "system_design", "closing"]),
-          question: z.string(),
-          greeting: z.string().optional(),
+    const output = z
+      .object({
+        stage: z.enum(["introduction", "hr", "technical", "resume", "behavioral", "system_design", "closing"]),
+        question: z.string(),
+        greeting: z.string(),
+      })
+      .parse(
+        await generateJson({
+          apiKey: getApiKey(),
+          model: INTERVIEW_MODEL,
+          system: baseSystemPrompt({ ...settings, difficulty: data.difficulty }),
+          schemaName: "first_question",
+          schema: objectSchema({
+            stage: { type: "string", enum: ["introduction", "hr", "technical", "resume", "behavioral", "system_design", "closing"] },
+            question: { type: "string" },
+            greeting: { type: "string" },
+          }),
+          prompt: `Start a ${data.mode} interview for ${candidateName}. Generate a brief greeting and the first question. The stage should be "${firstStage}".`,
         }),
-      }),
-      prompt: `Start a ${data.mode} interview for ${candidateName}. Generate a brief greeting and the first question. The stage should be "${firstStage}".`,
-    });
+      );
 
     const { data: interview, error } = await supabase
       .from("interviews")
@@ -146,32 +153,50 @@ export const submitAnswer = createServerFn({ method: "POST" })
       .map((m) => `${m.role === "ai" ? "Interviewer" : "Candidate"}: ${m.content}`)
       .join("\n");
 
-    const { output } = await generateText({
-      model: getProvider()(INTERVIEW_MODEL),
-      system: baseSystemPrompt({
-        difficulty: interview.difficulty,
-        topics: settings.topics ?? [],
-        company: settings.company,
-        role: settings.role,
-        resumeText: settings.resumeText,
-        voice: settings.voice ?? "male",
-      }),
-      output: Output.object({
-        schema: z.object({
-          stage: z.enum(["introduction", "hr", "technical", "resume", "behavioral", "system_design", "closing", "complete"]),
-          question: z.string(),
-          scores: z.object({
-            technicalAccuracy: z.number().int().min(1).max(10),
-            communicationClarity: z.number().int().min(1).max(10),
-            confidenceStructure: z.number().int().min(1).max(10),
-            overall: z.number().int().min(1).max(10),
-          }),
-          explanation: z.string(),
-          isFinal: z.boolean(),
+    const stageValues = ["introduction", "hr", "technical", "resume", "behavioral", "system_design", "closing", "complete"] as const;
+    const scoreProp = { type: "integer", minimum: 1, maximum: 10 };
+
+    const output = z
+      .object({
+        stage: z.enum(stageValues),
+        question: z.string(),
+        scores: z.object({
+          technicalAccuracy: z.number().int().min(1).max(10),
+          communicationClarity: z.number().int().min(1).max(10),
+          confidenceStructure: z.number().int().min(1).max(10),
+          overall: z.number().int().min(1).max(10),
         }),
-      }),
-      prompt: `Recent conversation:\n${history}\n\nCandidate just answered: "${data.answer}"\n\nEvaluate the answer and provide the next question. If this is the 8th exchange or more, or if you have covered enough topics, set isFinal to true and provide a closing question or thank-you message.`,
-    });
+        explanation: z.string(),
+        isFinal: z.boolean(),
+      })
+      .parse(
+        await generateJson({
+          apiKey: getApiKey(),
+          model: INTERVIEW_MODEL,
+          system: baseSystemPrompt({
+            difficulty: interview.difficulty,
+            topics: settings.topics ?? [],
+            company: settings.company,
+            role: settings.role,
+            resumeText: settings.resumeText,
+            voice: settings.voice ?? "male",
+          }),
+          schemaName: "next_question",
+          schema: objectSchema({
+            stage: { type: "string", enum: [...stageValues] },
+            question: { type: "string" },
+            scores: objectSchema({
+              technicalAccuracy: scoreProp,
+              communicationClarity: scoreProp,
+              confidenceStructure: scoreProp,
+              overall: scoreProp,
+            }),
+            explanation: { type: "string" },
+            isFinal: { type: "boolean" },
+          }),
+          prompt: `Recent conversation:\n${history}\n\nCandidate just answered: "${data.answer}"\n\nEvaluate the answer and provide the next question. If this is the 8th exchange or more, or if you have covered enough topics, set isFinal to true and provide a closing question or thank-you message.`,
+        }),
+      );
 
     await supabase.from("interview_messages").insert({
       interview_id: interview.id,
@@ -209,22 +234,46 @@ export const endInterview = createServerFn({ method: "POST" })
 
     const transcript = messages.map((m) => `${m.role === "ai" ? "Interviewer" : "Candidate"}: ${m.content}`).join("\n");
 
-    const { output } = await generateText({
-      model: getProvider()(REPORT_MODEL),
-      system: `You are an expert interview coach evaluating a campus placement mock interview. Provide a fair, detailed report in the requested JSON schema. Be honest but encouraging.`,
-      output: Output.object({
-        schema: z.object({
-          overallScore: z.number().int().min(1).max(100),
-          categoryScores: z.record(z.number().int().min(1).max(100)),
-          strengths: z.array(z.string()),
-          weaknesses: z.array(z.string()),
-          summary: z.string(),
-          recommendedResources: z.array(z.string()),
-          sampleAnswers: z.record(z.string()),
+    const raw = z
+      .object({
+        overallScore: z.number().int().min(1).max(100),
+        categoryScores: z.array(z.object({ name: z.string(), score: z.number().int().min(1).max(100) })),
+        strengths: z.array(z.string()),
+        weaknesses: z.array(z.string()),
+        summary: z.string(),
+        recommendedResources: z.array(z.string()),
+        sampleAnswers: z.array(z.object({ question: z.string(), answer: z.string() })),
+      })
+      .parse(
+        await generateJson({
+          apiKey: getApiKey(),
+          model: REPORT_MODEL,
+          system: `You are an expert interview coach evaluating a campus placement mock interview. Provide a fair, detailed report in the requested JSON schema. Be honest but encouraging.`,
+          schemaName: "final_report",
+          schema: objectSchema({
+            overallScore: { type: "integer", minimum: 1, maximum: 100 },
+            categoryScores: {
+              type: "array",
+              items: objectSchema({ name: { type: "string" }, score: { type: "integer", minimum: 1, maximum: 100 } }),
+            },
+            strengths: { type: "array", items: { type: "string" } },
+            weaknesses: { type: "array", items: { type: "string" } },
+            summary: { type: "string" },
+            recommendedResources: { type: "array", items: { type: "string" } },
+            sampleAnswers: {
+              type: "array",
+              items: objectSchema({ question: { type: "string" }, answer: { type: "string" } }),
+            },
+          }),
+          prompt: `Interview transcript:\n${transcript}\n\nGenerate a final report. categoryScores should include entries such as Technical Knowledge, Communication, Confidence/Structure, and Overall Fit. sampleAnswers should give 2-3 questions with a model concise answer.`,
         }),
-      }),
-      prompt: `Interview transcript:\n${transcript}\n\nGenerate a final report. categoryScores should include keys such as Technical Knowledge, Communication, Confidence/Structure, and Overall Fit. sampleAnswers should map 2-3 question stages to a model concise answer.`,
-    });
+      );
+
+    const output = {
+      ...raw,
+      categoryScores: Object.fromEntries(raw.categoryScores.map((c) => [c.name, c.score])),
+      sampleAnswers: Object.fromEntries(raw.sampleAnswers.map((s) => [s.question, s.answer])),
+    };
 
     const overallScore = output.overallScore;
 
