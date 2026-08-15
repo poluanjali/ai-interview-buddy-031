@@ -287,7 +287,19 @@ function InterviewPage() {
         </CardContent>
       </Card>
 
-      <ScrollArea className="h-[55vh] rounded-xl border border-border/60 bg-card p-4">
+      <div className="mb-4">
+        <VideoStage
+          stream={stream}
+          cameraOn={cameraOn}
+          onToggleCamera={toggleCamera}
+          aiSpeaking={aiSpeaking}
+          voiceEnabled={voiceEnabled}
+          onToggleVoice={toggleInterviewerVoice}
+          micLevel={micLevel}
+        />
+      </div>
+
+      <ScrollArea className="h-[40vh] rounded-xl border border-border/60 bg-card p-4">
         <div className="space-y-4">
           {messages.map((msg: any) => (
             <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
@@ -300,6 +312,15 @@ function InterviewPage() {
                 <div className="prose prose-sm dark:prose-invert max-w-none">
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
                 </div>
+                {msg.role === "ai" && (
+                  <button
+                    type="button"
+                    onClick={() => void speakText(msg.content)}
+                    className="mt-2 text-xs text-muted-foreground underline-offset-2 hover:underline"
+                  >
+                    Replay question
+                  </button>
+                )}
                 {msg.scores && (
                   <div className="mt-2 flex flex-wrap gap-2 border-t border-border/40 pt-2">
                     {Object.entries(msg.scores).map(([k, v]) => (
@@ -320,8 +341,8 @@ function InterviewPage() {
             <Textarea
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
-              placeholder="Type your answer here..."
-              className="min-h-[120px] resize-none pr-12"
+              placeholder={isRecording ? "Listening… speak your answer" : "Speak or type your answer..."}
+              className="min-h-[110px] resize-none pr-12"
               disabled={isSubmitting}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && e.metaKey) handleSubmit();
@@ -329,14 +350,29 @@ function InterviewPage() {
             />
             <Button
               size="icon"
-              variant={isListening ? "destructive" : "ghost"}
+              variant={isRecording ? "destructive" : "ghost"}
               className="absolute right-2 top-2"
-              onClick={toggleVoice}
-              disabled={isSubmitting}
+              onClick={toggleRecording}
+              disabled={isSubmitting || isTranscribing}
+              aria-label={isRecording ? "Stop recording" : "Answer by voice"}
             >
-              {isListening ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+              {isTranscribing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : isRecording ? (
+                <Square className="h-4 w-4" />
+              ) : (
+                <Mic className="h-4 w-4" />
+              )}
             </Button>
           </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {isRecording
+              ? "Recording… press stop when you finish speaking."
+              : isTranscribing
+                ? "Converting your speech to text…"
+                : "Tap the mic to answer out loud — your voice becomes text automatically."}
+          </p>
+
           <div className="mt-3 flex items-center justify-between">
             <Button variant="outline" size="sm" onClick={handleEnd} disabled={isEnding || messages.length < 3}>
               {isEnding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
