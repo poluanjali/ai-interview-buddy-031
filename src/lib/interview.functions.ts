@@ -12,7 +12,7 @@ import {
 import type { Database } from "@/integrations/supabase/types";
 
 const INTERVIEW_MODEL = "google/gemini-3.6-flash";
-const REPORT_MODEL = "openai/gpt-5.5";
+const REPORT_MODEL = "google/gemini-3.6-flash";
 
 type Json = Database["public"]["Tables"]["interviews"]["Row"]["settings"];
 
