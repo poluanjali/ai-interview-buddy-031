@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,14 +26,17 @@ export const Route = createFileRoute("/_authenticated/interview/$id")({
 function InterviewPage() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const fetchInterview = useServerFn(getInterview);
   const submit = useServerFn(submitAnswer);
   const end = useServerFn(endInterview);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["interview", id],
     queryFn: () => fetchInterview({ data: id }),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const [answer, setAnswer] = useState("");
@@ -48,14 +51,40 @@ function InterviewPage() {
   const messages = data?.interview_messages ?? [];
   const interview = data;
 
+  const appendMessages = (newMessages: any[]) => {
+    queryClient.setQueryData(["interview", id], (prev: any) =>
+      prev
+        ? { ...prev, interview_messages: [...(prev.interview_messages ?? []), ...newMessages] }
+        : prev,
+    );
+  };
+
   const handleSubmit = async () => {
     if (!answer.trim() || isSubmitting) return;
+    const text = answer.trim();
     setIsSubmitting(true);
+    setAnswer("");
+    // Show the answer immediately instead of waiting for a refetch round-trip.
+    appendMessages([
+      { id: `local-${Date.now()}`, role: "user", content: text, created_at: new Date().toISOString() },
+    ]);
     try {
-      await submit({ data: { interviewId: id, answer: answer.trim() } });
-      setAnswer("");
-      await refetch();
+      const result = await submit({ data: { interviewId: id, answer: text } });
+      appendMessages([
+        {
+          id: `local-ai-${Date.now()}`,
+          role: "ai",
+          content: result.question,
+          scores: result.scores,
+          stage: result.stage,
+          created_at: new Date().toISOString(),
+        },
+      ]);
+      queryClient.setQueryData(["interview", id], (prev: any) =>
+        prev ? { ...prev, current_stage: result.stage } : prev,
+      );
     } catch (err) {
+      setAnswer(text);
       toast.error(err instanceof Error ? err.message : "Failed to submit answer");
     } finally {
       setIsSubmitting(false);
