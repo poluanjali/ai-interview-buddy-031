@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,10 +8,21 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getInterview, submitAnswer, endInterview } from "@/lib/interview.functions";
+import { synthesizeSpeech, transcribeSpeech } from "@/lib/voice.functions";
+import { VideoStage } from "@/components/interview/VideoStage";
+import {
+  MicRecorder,
+  blobToBase64,
+  playBase64Audio,
+  speakWithBrowser,
+  stopSpeaking,
+  toSpeakableText,
+} from "@/lib/speech";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Mic, Send, Square, Loader2, ArrowLeft, Sparkles } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+
 
 export const Route = createFileRoute("/_authenticated/interview/$id")({
   head: ({ params }) => ({
@@ -42,14 +53,80 @@ function InterviewPage() {
   const [answer, setAnswer] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
-  const [isListening, setIsListening] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+  const [cameraOn, setCameraOn] = useState(true);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [aiSpeaking, setAiSpeaking] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+
+  const speak = useServerFn(synthesizeSpeech);
+  const transcribe = useServerFn(transcribeSpeech);
+  const recorderRef = useRef<MicRecorder | null>(null);
+  const spokenRef = useRef<Set<string>>(new Set());
+  const voiceEnabledRef = useRef(true);
+  voiceEnabledRef.current = voiceEnabled;
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [data?.interview_messages]);
 
+  // Camera + microphone for the video interview.
+  useEffect(() => {
+    let active = true;
+    let local: MediaStream | null = null;
+    navigator.mediaDevices
+      ?.getUserMedia({ video: { width: 640, height: 360 }, audio: true })
+      .catch(() => navigator.mediaDevices?.getUserMedia({ audio: true }))
+      .then((s) => {
+        if (!s) return;
+        if (!active) {
+          s.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        local = s;
+        setStream(s);
+        setCameraOn(s.getVideoTracks().length > 0);
+      })
+      .catch(() => toast.error("Camera/microphone access is needed for a video interview."));
+    return () => {
+      active = false;
+      local?.getTracks().forEach((t) => t.stop());
+      stopSpeaking();
+    };
+  }, []);
+
   const messages = data?.interview_messages ?? [];
   const interview = data;
+
+  const speakText = useCallback(
+    async (text: string) => {
+      if (!voiceEnabledRef.current) return;
+      const clean = toSpeakableText(text);
+      if (!clean) return;
+      setAiSpeaking(true);
+      try {
+        const res = await speak({ data: { text: clean.slice(0, 3000) } });
+        if (voiceEnabledRef.current) await playBase64Audio(res.audio, res.mimeType);
+      } catch {
+        if (voiceEnabledRef.current) await speakWithBrowser(clean);
+      } finally {
+        setAiSpeaking(false);
+      }
+    },
+    [speak],
+  );
+
+  // Read every new interviewer question aloud.
+  useEffect(() => {
+    const last = [...messages].reverse().find((m: any) => m.role === "ai");
+    if (!last || spokenRef.current.has(last.id)) return;
+    // Only auto-speak the newest question, not history on first load.
+    messages.forEach((m: any) => m.role === "ai" && spokenRef.current.add(m.id));
+    if (voiceEnabled) void speakText(last.content);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length]);
 
   const appendMessages = (newMessages: any[]) => {
     queryClient.setQueryData(["interview", id], (prev: any) =>
@@ -59,12 +136,11 @@ function InterviewPage() {
     );
   };
 
-  const handleSubmit = async () => {
-    if (!answer.trim() || isSubmitting) return;
-    const text = answer.trim();
+  const submitText = async (text: string) => {
+    if (!text.trim() || isSubmitting) return;
     setIsSubmitting(true);
     setAnswer("");
-    // Show the answer immediately instead of waiting for a refetch round-trip.
+    stopSpeaking();
     appendMessages([
       { id: `local-${Date.now()}`, role: "user", content: text, created_at: new Date().toISOString() },
     ]);
@@ -91,9 +167,12 @@ function InterviewPage() {
     }
   };
 
+  const handleSubmit = () => submitText(answer.trim());
+
   const handleEnd = async () => {
     if (isEnding) return;
     setIsEnding(true);
+    stopSpeaking();
     try {
       const result = await end({ data: { interviewId: id } });
       toast.success("Interview complete! Generating report...");
@@ -104,31 +183,63 @@ function InterviewPage() {
     }
   };
 
-  const toggleVoice = () => {
-    if (!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)) {
-      toast.error("Voice input is not supported in this browser.");
-      return;
+  const startRecording = async () => {
+    try {
+      stopSpeaking();
+      const recorder = new MicRecorder(setMicLevel);
+      await recorder.start(stream ?? undefined);
+      recorderRef.current = recorder;
+      setIsRecording(true);
+    } catch {
+      toast.error("Microphone access is needed to answer by voice.");
     }
-    if (isListening) {
-      (window as any).recognition?.stop();
-      setIsListening(false);
-      return;
-    }
-    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    const recognition = new Recognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = "en-IN";
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setAnswer((prev) => (prev ? prev + " " + transcript : transcript));
-    };
-    recognition.onerror = () => toast.error("Voice recognition failed. Try again.");
-    recognition.onend = () => setIsListening(false);
-    (window as any).recognition = recognition;
-    recognition.start();
-    setIsListening(true);
   };
+
+  const stopRecording = async () => {
+    const recorder = recorderRef.current;
+    recorderRef.current = null;
+    setIsRecording(false);
+    if (!recorder) return;
+    const blob = await recorder.stop(false);
+    if (!blob) {
+      toast.error("That recording was empty — please try again.");
+      return;
+    }
+    setIsTranscribing(true);
+    try {
+      const audio = await blobToBase64(blob);
+      const { text } = await transcribe({ data: { audio } });
+      if (!text) {
+        toast.error("Couldn't hear anything. Please try again.");
+        return;
+      }
+      setAnswer((prev) => (prev ? `${prev} ${text}` : text));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Transcription failed");
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  const toggleRecording = () => (isRecording ? void stopRecording() : void startRecording());
+
+  const toggleCamera = () => {
+    const track = stream?.getVideoTracks()[0];
+    if (!track) {
+      toast.error("No camera available.");
+      return;
+    }
+    track.enabled = !track.enabled;
+    setCameraOn(track.enabled);
+  };
+
+  const toggleInterviewerVoice = () => {
+    setVoiceEnabled((prev) => {
+      if (prev) stopSpeaking();
+      return !prev;
+    });
+  };
+
 
   if (isLoading) {
     return (
@@ -176,7 +287,19 @@ function InterviewPage() {
         </CardContent>
       </Card>
 
-      <ScrollArea className="h-[55vh] rounded-xl border border-border/60 bg-card p-4">
+      <div className="mb-4">
+        <VideoStage
+          stream={stream}
+          cameraOn={cameraOn}
+          onToggleCamera={toggleCamera}
+          aiSpeaking={aiSpeaking}
+          voiceEnabled={voiceEnabled}
+          onToggleVoice={toggleInterviewerVoice}
+          micLevel={micLevel}
+        />
+      </div>
+
+      <ScrollArea className="h-[40vh] rounded-xl border border-border/60 bg-card p-4">
         <div className="space-y-4">
           {messages.map((msg: any) => (
             <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
@@ -189,6 +312,15 @@ function InterviewPage() {
                 <div className="prose prose-sm dark:prose-invert max-w-none">
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
                 </div>
+                {msg.role === "ai" && (
+                  <button
+                    type="button"
+                    onClick={() => void speakText(msg.content)}
+                    className="mt-2 text-xs text-muted-foreground underline-offset-2 hover:underline"
+                  >
+                    Replay question
+                  </button>
+                )}
                 {msg.scores && (
                   <div className="mt-2 flex flex-wrap gap-2 border-t border-border/40 pt-2">
                     {Object.entries(msg.scores).map(([k, v]) => (
@@ -209,8 +341,8 @@ function InterviewPage() {
             <Textarea
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
-              placeholder="Type your answer here..."
-              className="min-h-[120px] resize-none pr-12"
+              placeholder={isRecording ? "Listening… speak your answer" : "Speak or type your answer..."}
+              className="min-h-[110px] resize-none pr-12"
               disabled={isSubmitting}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && e.metaKey) handleSubmit();
@@ -218,14 +350,29 @@ function InterviewPage() {
             />
             <Button
               size="icon"
-              variant={isListening ? "destructive" : "ghost"}
+              variant={isRecording ? "destructive" : "ghost"}
               className="absolute right-2 top-2"
-              onClick={toggleVoice}
-              disabled={isSubmitting}
+              onClick={toggleRecording}
+              disabled={isSubmitting || isTranscribing}
+              aria-label={isRecording ? "Stop recording" : "Answer by voice"}
             >
-              {isListening ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+              {isTranscribing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : isRecording ? (
+                <Square className="h-4 w-4" />
+              ) : (
+                <Mic className="h-4 w-4" />
+              )}
             </Button>
           </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {isRecording
+              ? "Recording… press stop when you finish speaking."
+              : isTranscribing
+                ? "Converting your speech to text…"
+                : "Tap the mic to answer out loud — your voice becomes text automatically."}
+          </p>
+
           <div className="mt-3 flex items-center justify-between">
             <Button variant="outline" size="sm" onClick={handleEnd} disabled={isEnding || messages.length < 3}>
               {isEnding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
