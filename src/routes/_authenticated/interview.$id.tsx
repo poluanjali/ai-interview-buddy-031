@@ -53,14 +53,80 @@ function InterviewPage() {
   const [answer, setAnswer] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
-  const [isListening, setIsListening] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+  const [cameraOn, setCameraOn] = useState(true);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [aiSpeaking, setAiSpeaking] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+
+  const speak = useServerFn(synthesizeSpeech);
+  const transcribe = useServerFn(transcribeSpeech);
+  const recorderRef = useRef<MicRecorder | null>(null);
+  const spokenRef = useRef<Set<string>>(new Set());
+  const voiceEnabledRef = useRef(true);
+  voiceEnabledRef.current = voiceEnabled;
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [data?.interview_messages]);
 
+  // Camera + microphone for the video interview.
+  useEffect(() => {
+    let active = true;
+    let local: MediaStream | null = null;
+    navigator.mediaDevices
+      ?.getUserMedia({ video: { width: 640, height: 360 }, audio: true })
+      .catch(() => navigator.mediaDevices?.getUserMedia({ audio: true }))
+      .then((s) => {
+        if (!s) return;
+        if (!active) {
+          s.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        local = s;
+        setStream(s);
+        setCameraOn(s.getVideoTracks().length > 0);
+      })
+      .catch(() => toast.error("Camera/microphone access is needed for a video interview."));
+    return () => {
+      active = false;
+      local?.getTracks().forEach((t) => t.stop());
+      stopSpeaking();
+    };
+  }, []);
+
   const messages = data?.interview_messages ?? [];
   const interview = data;
+
+  const speakText = useCallback(
+    async (text: string) => {
+      if (!voiceEnabledRef.current) return;
+      const clean = toSpeakableText(text);
+      if (!clean) return;
+      setAiSpeaking(true);
+      try {
+        const res = await speak({ data: { text: clean.slice(0, 3000) } });
+        if (voiceEnabledRef.current) await playBase64Audio(res.audio, res.mimeType);
+      } catch {
+        if (voiceEnabledRef.current) await speakWithBrowser(clean);
+      } finally {
+        setAiSpeaking(false);
+      }
+    },
+    [speak],
+  );
+
+  // Read every new interviewer question aloud.
+  useEffect(() => {
+    const last = [...messages].reverse().find((m: any) => m.role === "ai");
+    if (!last || spokenRef.current.has(last.id)) return;
+    // Only auto-speak the newest question, not history on first load.
+    messages.forEach((m: any) => m.role === "ai" && spokenRef.current.add(m.id));
+    if (voiceEnabled) void speakText(last.content);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length]);
 
   const appendMessages = (newMessages: any[]) => {
     queryClient.setQueryData(["interview", id], (prev: any) =>
@@ -70,12 +136,11 @@ function InterviewPage() {
     );
   };
 
-  const handleSubmit = async () => {
-    if (!answer.trim() || isSubmitting) return;
-    const text = answer.trim();
+  const submitText = async (text: string) => {
+    if (!text.trim() || isSubmitting) return;
     setIsSubmitting(true);
     setAnswer("");
-    // Show the answer immediately instead of waiting for a refetch round-trip.
+    stopSpeaking();
     appendMessages([
       { id: `local-${Date.now()}`, role: "user", content: text, created_at: new Date().toISOString() },
     ]);
@@ -102,9 +167,12 @@ function InterviewPage() {
     }
   };
 
+  const handleSubmit = () => submitText(answer.trim());
+
   const handleEnd = async () => {
     if (isEnding) return;
     setIsEnding(true);
+    stopSpeaking();
     try {
       const result = await end({ data: { interviewId: id } });
       toast.success("Interview complete! Generating report...");
@@ -115,31 +183,63 @@ function InterviewPage() {
     }
   };
 
-  const toggleVoice = () => {
-    if (!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)) {
-      toast.error("Voice input is not supported in this browser.");
-      return;
+  const startRecording = async () => {
+    try {
+      stopSpeaking();
+      const recorder = new MicRecorder(setMicLevel);
+      await recorder.start(stream ?? undefined);
+      recorderRef.current = recorder;
+      setIsRecording(true);
+    } catch {
+      toast.error("Microphone access is needed to answer by voice.");
     }
-    if (isListening) {
-      (window as any).recognition?.stop();
-      setIsListening(false);
-      return;
-    }
-    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    const recognition = new Recognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = "en-IN";
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setAnswer((prev) => (prev ? prev + " " + transcript : transcript));
-    };
-    recognition.onerror = () => toast.error("Voice recognition failed. Try again.");
-    recognition.onend = () => setIsListening(false);
-    (window as any).recognition = recognition;
-    recognition.start();
-    setIsListening(true);
   };
+
+  const stopRecording = async () => {
+    const recorder = recorderRef.current;
+    recorderRef.current = null;
+    setIsRecording(false);
+    if (!recorder) return;
+    const blob = await recorder.stop(false);
+    if (!blob) {
+      toast.error("That recording was empty — please try again.");
+      return;
+    }
+    setIsTranscribing(true);
+    try {
+      const audio = await blobToBase64(blob);
+      const { text } = await transcribe({ data: { audio } });
+      if (!text) {
+        toast.error("Couldn't hear anything. Please try again.");
+        return;
+      }
+      setAnswer((prev) => (prev ? `${prev} ${text}` : text));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Transcription failed");
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  const toggleRecording = () => (isRecording ? void stopRecording() : void startRecording());
+
+  const toggleCamera = () => {
+    const track = stream?.getVideoTracks()[0];
+    if (!track) {
+      toast.error("No camera available.");
+      return;
+    }
+    track.enabled = !track.enabled;
+    setCameraOn(track.enabled);
+  };
+
+  const toggleInterviewerVoice = () => {
+    setVoiceEnabled((prev) => {
+      if (prev) stopSpeaking();
+      return !prev;
+    });
+  };
+
 
   if (isLoading) {
     return (
