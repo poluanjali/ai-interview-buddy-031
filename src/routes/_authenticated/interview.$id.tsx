@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,10 +8,21 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { getInterview, submitAnswer, endInterview } from "@/lib/interview.functions";
+import { synthesizeSpeech, transcribeSpeech } from "@/lib/voice.functions";
+import { VideoStage } from "@/components/interview/VideoStage";
+import {
+  MicRecorder,
+  blobToBase64,
+  playBase64Audio,
+  speakWithBrowser,
+  stopSpeaking,
+  toSpeakableText,
+} from "@/lib/speech";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Mic, Send, Square, Loader2, ArrowLeft, Sparkles } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+
 
 export const Route = createFileRoute("/_authenticated/interview/$id")({
   head: ({ params }) => ({
