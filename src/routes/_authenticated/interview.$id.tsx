@@ -113,13 +113,14 @@ function InterviewPage() {
 
   // Read every new interviewer question aloud.
   useEffect(() => {
+    if (!devicesReady) return;
     const last = [...messages].reverse().find((m: any) => m.role === "ai");
     if (!last || spokenRef.current.has(last.id)) return;
     // Only auto-speak the newest question, not history on first load.
     messages.forEach((m: any) => m.role === "ai" && spokenRef.current.add(m.id));
     if (voiceEnabled) void speakText(last.content);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages.length]);
+  }, [messages.length, devicesReady]);
 
   const appendMessages = (newMessages: any[]) => {
     queryClient.setQueryData(["interview", id], (prev: any) =>
