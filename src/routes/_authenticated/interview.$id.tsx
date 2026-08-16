@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { getInterview, submitAnswer, endInterview } from "@/lib/interview.functions";
 import { synthesizeSpeech, transcribeSpeech } from "@/lib/voice.functions";
 import { VideoStage } from "@/components/interview/VideoStage";
+import { PermissionSetup } from "@/components/interview/PermissionSetup";
 import {
   MicRecorder,
   blobToBase64,
