@@ -56,10 +56,11 @@ function InterviewPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
-  const [cameraOn, setCameraOn] = useState(true);
+  const [cameraOn, setCameraOn] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [aiSpeaking, setAiSpeaking] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [devicesReady, setDevicesReady] = useState(false);
 
   const speak = useServerFn(synthesizeSpeech);
   const transcribe = useServerFn(transcribeSpeech);
@@ -67,35 +68,27 @@ function InterviewPage() {
   const spokenRef = useRef<Set<string>>(new Set());
   const voiceEnabledRef = useRef(true);
   voiceEnabledRef.current = voiceEnabled;
+  const streamRef = useRef<MediaStream | null>(null);
+  streamRef.current = stream;
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [data?.interview_messages]);
 
-  // Camera + microphone for the video interview.
+  // Release devices and stop audio when leaving the room.
   useEffect(() => {
-    let active = true;
-    let local: MediaStream | null = null;
-    navigator.mediaDevices
-      ?.getUserMedia({ video: { width: 640, height: 360 }, audio: true })
-      .catch(() => navigator.mediaDevices?.getUserMedia({ audio: true }))
-      .then((s) => {
-        if (!s) return;
-        if (!active) {
-          s.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        local = s;
-        setStream(s);
-        setCameraOn(s.getVideoTracks().length > 0);
-      })
-      .catch(() => toast.error("Camera/microphone access is needed for a video interview."));
     return () => {
-      active = false;
-      local?.getTracks().forEach((t) => t.stop());
+      streamRef.current?.getTracks().forEach((t) => t.stop());
       stopSpeaking();
     };
   }, []);
+
+  const handleDevicesReady = (s: MediaStream | null) => {
+    setStream(s);
+    setCameraOn((s?.getVideoTracks().length ?? 0) > 0);
+    setDevicesReady(true);
+  };
+
 
   const messages = data?.interview_messages ?? [];
   const interview = data;
