@@ -62,6 +62,8 @@ function InterviewPage() {
   const [aiSpeaking, setAiSpeaking] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [devicesReady, setDevicesReady] = useState(false);
+  const [autoMode, setAutoMode] = useState(true);
+  const [silenceCountdown, setSilenceCountdown] = useState<number | null>(null);
 
   const speak = useServerFn(synthesizeSpeech);
   const transcribe = useServerFn(transcribeSpeech);
@@ -71,6 +73,10 @@ function InterviewPage() {
   voiceEnabledRef.current = voiceEnabled;
   const streamRef = useRef<MediaStream | null>(null);
   streamRef.current = stream;
+  const lastSpeechRef = useRef<number>(0);
+  const heardSpeechRef = useRef(false);
+  const stoppingRef = useRef(false);
+
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
