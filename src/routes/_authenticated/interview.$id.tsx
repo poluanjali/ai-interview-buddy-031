@@ -62,6 +62,8 @@ function InterviewPage() {
   const [aiSpeaking, setAiSpeaking] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [devicesReady, setDevicesReady] = useState(false);
+  const [autoMode, setAutoMode] = useState(true);
+  const [silenceCountdown, setSilenceCountdown] = useState<number | null>(null);
 
   const speak = useServerFn(synthesizeSpeech);
   const transcribe = useServerFn(transcribeSpeech);
@@ -71,6 +73,10 @@ function InterviewPage() {
   voiceEnabledRef.current = voiceEnabled;
   const streamRef = useRef<MediaStream | null>(null);
   streamRef.current = stream;
+  const lastSpeechRef = useRef<number>(0);
+  const heardSpeechRef = useRef(false);
+  const stoppingRef = useRef(false);
+
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -178,45 +184,100 @@ function InterviewPage() {
     }
   };
 
-  const startRecording = async () => {
+  const SILENCE_MS = 2000;
+
+  const handleLevel = useCallback((level: number) => {
+    setMicLevel(level);
+    if (level > 0.05) {
+      heardSpeechRef.current = true;
+      lastSpeechRef.current = Date.now();
+    }
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    if (recorderRef.current) return;
     try {
       stopSpeaking();
-      const recorder = new MicRecorder(setMicLevel);
-      await recorder.start(stream ?? undefined);
+      heardSpeechRef.current = false;
+      lastSpeechRef.current = Date.now();
+      const recorder = new MicRecorder(handleLevel);
+      await recorder.start(streamRef.current ?? undefined);
       recorderRef.current = recorder;
       setIsRecording(true);
     } catch {
       toast.error("Microphone access is needed to answer by voice.");
     }
-  };
+  }, [handleLevel]);
 
-  const stopRecording = async () => {
-    const recorder = recorderRef.current;
-    recorderRef.current = null;
-    setIsRecording(false);
-    if (!recorder) return;
-    const blob = await recorder.stop(false);
-    if (!blob) {
-      toast.error("That recording was empty — please try again.");
-      return;
-    }
-    setIsTranscribing(true);
-    try {
-      const audio = await blobToBase64(blob);
-      const { text } = await transcribe({ data: { audio } });
-      if (!text) {
-        toast.error("Couldn't hear anything. Please try again.");
+  const stopRecording = useCallback(
+    async (autoSubmit = false) => {
+      const recorder = recorderRef.current;
+      recorderRef.current = null;
+      setIsRecording(false);
+      setSilenceCountdown(null);
+      if (!recorder) return;
+      const blob = await recorder.stop(false);
+      if (!blob) {
+        if (!autoSubmit) toast.error("That recording was empty — please try again.");
         return;
       }
-      setAnswer((prev) => (prev ? `${prev} ${text}` : text));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Transcription failed");
-    } finally {
-      setIsTranscribing(false);
-    }
-  };
+      setIsTranscribing(true);
+      try {
+        const audio = await blobToBase64(blob);
+        const { text } = await transcribe({ data: { audio } });
+        if (!text) {
+          if (!autoSubmit) toast.error("Couldn't hear anything. Please try again.");
+          return;
+        }
+        let combined = text;
+        setAnswer((prev) => {
+          combined = prev ? `${prev} ${text}` : text;
+          return combined;
+        });
+        if (autoSubmit) {
+          setIsTranscribing(false);
+          await submitText(combined.trim());
+        }
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Transcription failed");
+      } finally {
+        setIsTranscribing(false);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [transcribe],
+  );
 
-  const toggleRecording = () => (isRecording ? void stopRecording() : void startRecording());
+  // Auto-submit once the candidate has been silent for a moment.
+  useEffect(() => {
+    if (!isRecording || !autoMode) return;
+    const timer = window.setInterval(() => {
+      if (!heardSpeechRef.current) {
+        setSilenceCountdown(null);
+        return;
+      }
+      const quietFor = Date.now() - lastSpeechRef.current;
+      setSilenceCountdown(Math.max(0, Math.ceil((SILENCE_MS - quietFor) / 1000)));
+      if (quietFor >= SILENCE_MS && !stoppingRef.current) {
+        stoppingRef.current = true;
+        void stopRecording(true).finally(() => {
+          stoppingRef.current = false;
+        });
+      }
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [isRecording, autoMode, stopRecording]);
+
+  // Start listening automatically as soon as the interviewer finishes a question.
+  useEffect(() => {
+    if (interview?.status === "complete") return;
+    if (!autoMode || !devicesReady || aiSpeaking || isRecording || isSubmitting || isTranscribing) return;
+    const t = window.setTimeout(() => void startRecording(), 500);
+    return () => window.clearTimeout(t);
+  }, [autoMode, devicesReady, aiSpeaking, isRecording, isSubmitting, isTranscribing, startRecording]);
+
+  const toggleRecording = () => (isRecording ? void stopRecording(autoMode) : void startRecording());
+
 
   const toggleCamera = () => {
     const track = stream?.getVideoTracks()[0];
@@ -376,13 +437,32 @@ function InterviewPage() {
               )}
             </Button>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {isRecording
-              ? "Recording… press stop when you finish speaking."
-              : isTranscribing
-                ? "Converting your speech to text…"
-                : "Tap the mic to answer out loud — your voice becomes text automatically."}
-          </p>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              {isRecording
+                ? autoMode
+                  ? silenceCountdown !== null
+                    ? `Listening… auto-submitting in ${silenceCountdown}s if you stop speaking.`
+                    : "Listening… start speaking your answer."
+                  : "Recording… press stop when you finish speaking."
+                : isTranscribing
+                  ? "Converting your speech to text…"
+                  : autoMode
+                    ? "Hands-free mode: just speak — your answer is sent automatically when you pause."
+                    : "Tap the mic to answer out loud — your voice becomes text automatically."}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setAutoMode((p) => !p);
+                if (isRecording) void stopRecording(false);
+              }}
+              className="text-xs underline underline-offset-2 text-muted-foreground hover:text-foreground"
+            >
+              {autoMode ? "Switch to manual submit" : "Enable hands-free mode"}
+            </button>
+          </div>
+
 
           <div className="mt-3 flex items-center justify-between">
             <Button variant="outline" size="sm" onClick={handleEnd} disabled={isEnding || messages.length < 3}>
