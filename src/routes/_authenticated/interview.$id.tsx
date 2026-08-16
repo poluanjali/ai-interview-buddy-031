@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { getInterview, submitAnswer, endInterview } from "@/lib/interview.functions";
 import { synthesizeSpeech, transcribeSpeech } from "@/lib/voice.functions";
 import { VideoStage } from "@/components/interview/VideoStage";
+import { PermissionSetup } from "@/components/interview/PermissionSetup";
 import {
   MicRecorder,
   blobToBase64,
@@ -56,10 +57,11 @@ function InterviewPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
-  const [cameraOn, setCameraOn] = useState(true);
+  const [cameraOn, setCameraOn] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [aiSpeaking, setAiSpeaking] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [devicesReady, setDevicesReady] = useState(false);
 
   const speak = useServerFn(synthesizeSpeech);
   const transcribe = useServerFn(transcribeSpeech);
@@ -67,35 +69,27 @@ function InterviewPage() {
   const spokenRef = useRef<Set<string>>(new Set());
   const voiceEnabledRef = useRef(true);
   voiceEnabledRef.current = voiceEnabled;
+  const streamRef = useRef<MediaStream | null>(null);
+  streamRef.current = stream;
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [data?.interview_messages]);
 
-  // Camera + microphone for the video interview.
+  // Release devices and stop audio when leaving the room.
   useEffect(() => {
-    let active = true;
-    let local: MediaStream | null = null;
-    navigator.mediaDevices
-      ?.getUserMedia({ video: { width: 640, height: 360 }, audio: true })
-      .catch(() => navigator.mediaDevices?.getUserMedia({ audio: true }))
-      .then((s) => {
-        if (!s) return;
-        if (!active) {
-          s.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        local = s;
-        setStream(s);
-        setCameraOn(s.getVideoTracks().length > 0);
-      })
-      .catch(() => toast.error("Camera/microphone access is needed for a video interview."));
     return () => {
-      active = false;
-      local?.getTracks().forEach((t) => t.stop());
+      streamRef.current?.getTracks().forEach((t) => t.stop());
       stopSpeaking();
     };
   }, []);
+
+  const handleDevicesReady = (s: MediaStream | null) => {
+    setStream(s);
+    setCameraOn((s?.getVideoTracks().length ?? 0) > 0);
+    setDevicesReady(true);
+  };
+
 
   const messages = data?.interview_messages ?? [];
   const interview = data;
@@ -120,13 +114,14 @@ function InterviewPage() {
 
   // Read every new interviewer question aloud.
   useEffect(() => {
+    if (!devicesReady) return;
     const last = [...messages].reverse().find((m: any) => m.role === "ai");
     if (!last || spokenRef.current.has(last.id)) return;
     // Only auto-speak the newest question, not history on first load.
     messages.forEach((m: any) => m.role === "ai" && spokenRef.current.add(m.id));
     if (voiceEnabled) void speakText(last.content);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages.length]);
+  }, [messages.length, devicesReady]);
 
   const appendMessages = (newMessages: any[]) => {
     queryClient.setQueryData(["interview", id], (prev: any) =>
@@ -259,6 +254,22 @@ function InterviewPage() {
   }
 
   const isComplete = interview.status === "complete";
+
+  if (!devicesReady && !isComplete) {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-4">
+          <Link to="/dashboard">
+            <Button variant="ghost" size="sm" className="gap-2">
+              <ArrowLeft className="h-4 w-4" /> Dashboard
+            </Button>
+          </Link>
+        </div>
+        <PermissionSetup onReady={handleDevicesReady} />
+      </div>
+    );
+  }
+
 
   return (
     <div className="mx-auto max-w-4xl">
