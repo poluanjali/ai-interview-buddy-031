@@ -254,6 +254,22 @@ function InterviewPage() {
 
   const isComplete = interview.status === "complete";
 
+  if (!devicesReady && !isComplete) {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-4">
+          <Link to="/dashboard">
+            <Button variant="ghost" size="sm" className="gap-2">
+              <ArrowLeft className="h-4 w-4" /> Dashboard
+            </Button>
+          </Link>
+        </div>
+        <PermissionSetup onReady={handleDevicesReady} />
+      </div>
+    );
+  }
+
+
   return (
     <div className="mx-auto max-w-4xl">
       <div className="mb-4 flex items-center justify-between">
