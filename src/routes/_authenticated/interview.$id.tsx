@@ -270,6 +270,7 @@ function InterviewPage() {
 
   // Start listening automatically as soon as the interviewer finishes a question.
   useEffect(() => {
+    if (interview?.status === "complete") return;
     if (!autoMode || !devicesReady || aiSpeaking || isRecording || isSubmitting || isTranscribing) return;
     const t = window.setTimeout(() => void startRecording(), 500);
     return () => window.clearTimeout(t);
