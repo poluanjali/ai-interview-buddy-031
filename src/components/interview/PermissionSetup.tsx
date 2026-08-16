@@ -155,6 +155,8 @@ export function PermissionSetup({ onReady }: Props) {
     }
   }, [attachPreview]);
 
+  const handedOffRef = useRef(false);
+
   useEffect(() => {
     return () => {
       cleanupRef.current?.();
@@ -164,7 +166,7 @@ export function PermissionSetup({ onReady }: Props) {
     };
   }, []);
 
-  const handedOffRef = useRef(false);
+
 
   const start = () => {
     handedOffRef.current = true;
