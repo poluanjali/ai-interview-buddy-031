@@ -436,13 +436,32 @@ function InterviewPage() {
               )}
             </Button>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {isRecording
-              ? "Recording… press stop when you finish speaking."
-              : isTranscribing
-                ? "Converting your speech to text…"
-                : "Tap the mic to answer out loud — your voice becomes text automatically."}
-          </p>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              {isRecording
+                ? autoMode
+                  ? silenceCountdown !== null
+                    ? `Listening… auto-submitting in ${silenceCountdown}s if you stop speaking.`
+                    : "Listening… start speaking your answer."
+                  : "Recording… press stop when you finish speaking."
+                : isTranscribing
+                  ? "Converting your speech to text…"
+                  : autoMode
+                    ? "Hands-free mode: just speak — your answer is sent automatically when you pause."
+                    : "Tap the mic to answer out loud — your voice becomes text automatically."}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setAutoMode((p) => !p);
+                if (isRecording) void stopRecording(false);
+              }}
+              className="text-xs underline underline-offset-2 text-muted-foreground hover:text-foreground"
+            >
+              {autoMode ? "Switch to manual submit" : "Enable hands-free mode"}
+            </button>
+          </div>
+
 
           <div className="mt-3 flex items-center justify-between">
             <Button variant="outline" size="sm" onClick={handleEnd} disabled={isEnding || messages.length < 3}>
