@@ -184,7 +184,7 @@ function InterviewPage() {
     }
   };
 
-  const SILENCE_MS = 2000;
+  const SILENCE_MS = 5 * 60 * 1000;
 
   const handleLevel = useCallback((level: number) => {
     setMicLevel(level);
@@ -442,7 +442,7 @@ function InterviewPage() {
               {isRecording
                 ? autoMode
                   ? silenceCountdown !== null
-                    ? `Listening… auto-submitting in ${silenceCountdown}s if you stop speaking.`
+                    ? `Listening… auto-submitting in ${Math.floor(silenceCountdown / 60)}:${String(silenceCountdown % 60).padStart(2, "0")} if you stop speaking.`
                     : "Listening… start speaking your answer."
                   : "Recording… press stop when you finish speaking."
                 : isTranscribing
