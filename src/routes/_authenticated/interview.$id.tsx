@@ -184,11 +184,11 @@ function InterviewPage() {
     }
   };
 
-  const SILENCE_MS = 2 * 60 * 1000;
+  const SILENCE_MS = 60 * 1000;
 
   const handleLevel = useCallback((level: number) => {
     setMicLevel(level);
-    if (level > 0.05) {
+    if (level > 0.03) {
       heardSpeechRef.current = true;
       lastSpeechRef.current = Date.now();
     }
