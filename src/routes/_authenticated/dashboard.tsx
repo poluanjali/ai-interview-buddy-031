@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { createInterview, getDashboardData } from "@/lib/interview.functions";
+import { ResumeUpload } from "@/components/interview/ResumeUpload";
+
 import { useServerFn } from "@tanstack/react-start";
 import { Plus, Play, FileText, Trophy, TrendingUp, Clock, Calendar } from "lucide-react";
 import { toast } from "sonner";
