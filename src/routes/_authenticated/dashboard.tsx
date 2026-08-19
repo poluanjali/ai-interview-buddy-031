@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { createInterview, getDashboardData } from "@/lib/interview.functions";
+import { ResumeUpload } from "@/components/interview/ResumeUpload";
+
 import { useServerFn } from "@tanstack/react-start";
 import { Plus, Play, FileText, Trophy, TrendingUp, Clock, Calendar } from "lucide-react";
 import { toast } from "sonner";
@@ -177,9 +179,20 @@ function DashboardPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="resume">Resume / project summary (optional)</Label>
-                <Textarea id="resume" placeholder="Paste key projects, skills, and achievements..." value={resumeText} onChange={(e) => setResumeText(e.target.value)} rows={4} />
+                <Label>Resume (optional)</Label>
+                <ResumeUpload
+                  onParsed={({ profile, resumeText: text }) => {
+                    setResumeText(text);
+                    const matched = profile.suggestedTopics
+                      .map((s) => topicOptions.find((t) => t.toLowerCase() === s.toLowerCase()))
+                      .filter((t): t is string => Boolean(t));
+                    setTopics((prev) => Array.from(new Set([...prev, "Resume", ...matched])));
+                  }}
+                  onCleared={() => setResumeText("")}
+                />
+                <Textarea id="resume" placeholder="Or paste key projects, skills, and achievements..." value={resumeText} onChange={(e) => setResumeText(e.target.value)} rows={4} />
               </div>
+
               <Button className="w-full" onClick={handleCreate} disabled={creating || topics.length === 0}>
                 {creating ? "Starting..." : "Start interview"}
               </Button>
