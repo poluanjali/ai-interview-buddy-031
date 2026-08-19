@@ -75,6 +75,7 @@ function InterviewPage() {
   streamRef.current = stream;
   const lastSpeechRef = useRef<number>(0);
   const heardSpeechRef = useRef(false);
+  const speechFramesRef = useRef(0);
   const stoppingRef = useRef(false);
 
 
@@ -188,7 +189,14 @@ function InterviewPage() {
 
   const handleLevel = useCallback((level: number) => {
     setMicLevel(level);
-    if (level > 0.03) {
+    // A single low-level spike is usually fan/room noise. Require a short,
+    // sustained voice signal before resetting the silence countdown.
+    if (level >= 0.08) {
+      speechFramesRef.current += 1;
+    } else {
+      speechFramesRef.current = 0;
+    }
+    if (speechFramesRef.current >= 3) {
       heardSpeechRef.current = true;
       lastSpeechRef.current = Date.now();
     }
@@ -199,6 +207,7 @@ function InterviewPage() {
     try {
       stopSpeaking();
       heardSpeechRef.current = false;
+      speechFramesRef.current = 0;
       lastSpeechRef.current = Date.now();
       const recorder = new MicRecorder(handleLevel);
       await recorder.start(streamRef.current ?? undefined);
