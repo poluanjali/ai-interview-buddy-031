@@ -11,6 +11,7 @@ import { getInterview, submitAnswer, endInterview } from "@/lib/interview.functi
 import { synthesizeSpeech, transcribeSpeech } from "@/lib/voice.functions";
 import { VideoStage } from "@/components/interview/VideoStage";
 import { PermissionSetup } from "@/components/interview/PermissionSetup";
+import { CountdownTimer } from "@/components/interview/CountdownTimer";
 import {
   MicRecorder,
   blobToBase64,
