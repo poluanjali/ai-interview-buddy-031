@@ -11,7 +11,7 @@ import { lovable } from "@/integrations/lovable";
 import { toast } from "sonner";
 import { Mail, Chrome, Loader2 } from "lucide-react";
 
-export const Route = createFileRoute("/auth")({
+export const Route = createFileRoute("/auth/login")({
   head: () => ({
     meta: [
       { title: "Sign in — MockMate" },
@@ -21,7 +21,7 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
-function AuthPage() {
+export function AuthPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -65,7 +65,7 @@ function AuthPage() {
     setLoading(true);
     try {
       const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin,
+        redirect_uri: `${window.location.origin}/auth/login`,
       });
       if (result.error) throw result.error;
       if (!result.redirected) {

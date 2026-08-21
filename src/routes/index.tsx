@@ -33,10 +33,10 @@ function LandingPage() {
             <a href="#interview-types" className="text-muted-foreground hover:text-foreground transition-colors">Interview types</a>
           </nav>
           <div className="flex items-center gap-3">
-            <Link to="/auth">
+            <Link to="/auth/login">
               <Button variant="ghost" size="sm">Sign in</Button>
             </Link>
-            <Link to="/auth">
+            <Link to="/auth/login">
               <Button size="sm">Get started</Button>
             </Link>
           </div>
@@ -58,7 +58,7 @@ function LandingPage() {
               MockMate simulates HR, technical, and DSA rounds with an adaptive AI interviewer. Get scored on clarity, confidence, and accuracy — then receive a detailed report card.
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <Link to="/auth">
+              <Link to="/auth/login">
                 <Button size="lg" className="gap-2">
                   Start free practice
                   <ArrowRight className="h-4 w-4" />
@@ -169,7 +169,7 @@ function LandingPage() {
             <h2 className="text-3xl font-bold tracking-tight">Ready to ace your next interview?</h2>
             <p className="mx-auto mt-4 max-w-xl text-primary-foreground/80">Join thousands of students practicing smarter with MockMate.</p>
             <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <Link to="/auth">
+              <Link to="/auth/login">
                 <Button size="lg" variant="secondary" className="gap-2">
                   Create free account
                   <ArrowRight className="h-4 w-4" />

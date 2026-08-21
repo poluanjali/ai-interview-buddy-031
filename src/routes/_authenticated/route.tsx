@@ -9,14 +9,14 @@ export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async () => {
     const { data } = await supabase.auth.getSession();
     if (!data.session) {
-      throw redirect({ to: "/auth" });
+      throw redirect({ to: "/auth/login" });
     }
   },
   errorComponent: ({ error }) => {
     const navigate = useNavigate();
     useEffect(() => {
       if (error instanceof Response && error.status === 401) {
-        navigate({ to: "/auth" });
+        navigate({ to: "/auth/login" });
       }
     }, [error, navigate]);
     return (
@@ -38,7 +38,7 @@ function AuthenticatedLayout() {
       setLoading(false);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) navigate({ to: "/auth" });
+      if (!session) navigate({ to: "/auth/login" });
       else setUser(session.user);
     });
     return () => listener.subscription.unsubscribe();
@@ -46,7 +46,7 @@ function AuthenticatedLayout() {
 
   const signOut = async () => {
     await supabase.auth.signOut();
-    navigate({ to: "/auth" });
+    navigate({ to: "/auth/login" });
   };
 
   if (loading) {
