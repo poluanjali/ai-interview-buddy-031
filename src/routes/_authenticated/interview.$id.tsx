@@ -186,7 +186,7 @@ function InterviewPage() {
     }
   };
 
-  const SILENCE_MS = 30 * 1000;
+  const SILENCE_MS = 10 * 1000;
 
   const handleLevel = useCallback((level: number) => {
     setMicLevel(level);
